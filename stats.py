@@ -3,12 +3,13 @@ import json
 import re
 import time
 import base64
+import matplotlib.pyplot as plot
 
 ####### SETTING VARIABLES ##########
 _RELOAD = False # If true, always fetches all messages again
 
 BASE_GROUPME_URL = "https://api.groupme.com/v3/"
-# .groupme.env should be a file with the first line being the base64 encoded groupme api token
+# .groupme.env should be a file with the first line being your groupme api token (can be base64 encoded)
 with open(".groupme.env") as f:
     token = f.readline().strip()
     try:
@@ -116,6 +117,15 @@ def lps(mapthing):
     for p in sorted(list(mapthing.items()), key=lambda x:-x[1]):
         print(p[0] + ":",  p[1])
 
+# Given an iterable, prints it line by line
+def iter_print(listtthing):
+    if type(listtthing) is dict:
+        for k, v in listtthing.items():
+            print(k, v)
+    else:
+        for item in listtthing:
+            print(item)
+
 # Converts unix time into a long string of local time for me (Most likely PT)
 def convert_time(epoch_time):
     return time.strftime('%Y-%m-%d - %B %A - %I:%M:%S%p %c', time.localtime(epoch_time))
@@ -159,8 +169,34 @@ def likes_per_message_per_user(group_id, load_recent=_RELOAD):
 def time_split(group_id, load_recent=_RELOAD):
     all_messages = load_messages(group_id, load_recent)
 
+    text_and_time = []
     for msg in all_messages:
-        pass
+        converted_msg = {"text": msg["text"]}
+        converted_msg["time"] = convert_time(msg["created_at"])
+        converted_msg["hour"] = int(time.strftime('%H', time.localtime(msg["created_at"])))
+        text_and_time.append(converted_msg)
+
+    return text_and_time
+
+def count_by_hour(group_id, load_recent=_RELOAD):
+    text_and_time = time_split(group_id, load_recent)
+
+    hour_counts = {i: 0 for i in range(24)}
+    for msg in text_and_time:
+        if msg["hour"] in hour_counts:
+            hour_counts[msg["hour"]] += 1
+        else:
+            hour_counts[msg["hour"]] = 1
+
+    return hour_counts
+
+def display_hourly_usage(group_id, load_recent=_RELOAD):
+    hourly_counts = count_by_hour(group_id, load_recent)
+
+    ordered_by_hour = sorted(list(hourly_counts.items()), key=lambda x: x[0])
+    plot.plot([i[0] for i in ordered_by_hour], [i[1] for i in ordered_by_hour])
+    plot.show()
+    iter_print(ordered_by_hour)
 
 #################################################################
 #################### WORD ANALYSIS FUNCTIONS ####################
@@ -180,7 +216,70 @@ def word_count(group_id, load_recent=_RELOAD):
 
     return word_freq
 
-lps(count_msg_by_user("41805466"))
+def most_liked_words(group_id, load_recent=_RELOAD):
+    all_messages = load_messages(group_id)
+
+    word_likes = {}
+    for msg in all_messages:
+        if msg and "text" in msg and msg["text"]:
+            words_used = set(word_split(msg["text"]))
+            for word in words_used:
+                if word in word_likes:
+                    word_likes[word] += len(msg["favorited_by"])
+                else:
+                    word_likes[word] = len(msg["favorited_by"])
+
+    return word_likes
+
+def popular_words_with_info(group_id, load_recent=_RELOAD):
+    all_messages = load_messages(group_id)
+
+    word_likes = {}
+    word_present = {}
+    for msg in all_messages:
+        if msg and "text" in msg and msg["text"]:
+            words_used = set(word_split(msg["text"]))
+            for word in words_used:
+                if word in word_likes:
+                    word_likes[word] += len(msg["favorited_by"])
+                    word_present[word] += 1
+                else:
+                    word_likes[word] = len(msg["favorited_by"])
+                    word_present[word] = 1
+
+    word_freq = word_count(group_id, load_recent)
+
+    return {word + " was used " +str(word_freq[word]) + ", and was liked " + str(word_likes[word]): word_likes[word] / word_present[word] for word in word_present if word_freq[word] > 1}
+
+def popular_words(group_id, load_recent=_RELOAD):
+    all_messages = load_messages(group_id)
+
+    word_likes = {}
+    word_present = {}
+    for msg in all_messages:
+        if msg and "text" in msg and msg["text"]:
+            words_used = set(word_split(msg["text"]))
+            for word in words_used:
+                if word in word_likes:
+                    word_likes[word] += len(msg["favorited_by"])
+                    word_present[word] += 1
+                else:
+                    word_likes[word] = len(msg["favorited_by"])
+                    word_present[word] = 1
+
+    return {word: word_likes[word] / word_present[word] for word in word_present}
+
+##########################################################
+#################### USER INTERACTION ####################
+##########################################################
+
+# display_hourly_usage(41805466)
+# display_hourly_usage("all")
+# hourly_counts = count_by_hour("41805466")
+# hourly_counts = count_by_hour("all")
+
+# hourly_counts = sorted(list(hourly_counts.items()), key=lambda x: x[0])
+# iter_print(hourly_counts)
 
 # thing = load_messages(19259990)
 # for msg in thing:
