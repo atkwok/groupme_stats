@@ -59,6 +59,7 @@ def fetch_all_messages(group_id):
 
     with open("messages/all_messages_for_" + str(group_id) + ".txt", "w") as f:
         f.write(json.dumps(ret_msgs))
+    print(len(ret_msgs))
     return ret_msgs
 
 # Fetches all messages for all groups and writes them to local files
@@ -89,6 +90,7 @@ def load_messages(group_id, load_recent=_RELOAD):
         r_json = json.loads(r.text)
         if len(r_json["response"]["messages"]) > 0:
             all_messages = r_json["response"]["messages"] + all_messages
+            all_messages = sorted(all_messages, key=lambda x: -int(x["created_at"]))
             with open("messages/all_messages_for_" + str(group_id) + ".txt", "w") as f:
                 f.write(json.dumps(all_messages))
             print("New messages for this group!")
@@ -280,12 +282,217 @@ def popular_words(group_id, load_recent=_RELOAD):
 
     return {word: word_likes[word] / word_present[word] for word in word_present}
 
+#################################################################
+#################### STEGANOGRAPHY FUNCTIONS ####################
+#################################################################
+
+def all_messages_by_user(group_id, username):
+    messages_by_user = aggregate_msg_by_user(group_id)[username]
+    return messages_by_user
+
+def processed_messages_by_user(group_id, username):
+    messages_by_user = all_messages_by_user(group_id, username)
+    # iter_print([i for i in messages_by_user if 'text' not in i])
+    return [re.sub(r'[^A-Za-z]+', '', msg['text']).lower() for msg in messages_by_user if 'text' in msg]
+
+def set_letters_by_user(group_id, username):
+    chars_by_msg_by_user = processed_messages_by_user(group_id, username)
+    return [set(i) for i in chars_by_msg_by_user]
+
+def init_dict():
+    with open("dictionary.txt") as f:
+        return set(json.loads(f.readline()))
+
+def init_trie(dictionary):
+    root_trie = Trie("")
+    root_trie.is_root = True
+
+    for word in dictionary:
+        add_to_trie(root_trie, word)
+    return root_trie
+
+# MAKE THIS MORE EFFICIENT
+def dict_attack(group_id, username):
+    word_dict = init_dict()
+    word_trie = init_trie(word_dict)
+
+    ordered_letter_sets = set_letters_by_user(group_id, username)[::-1]
+
+    final_ret_strs = []
+
+    all_strs = [("", word_trie)]
+    # all_strs = [(i, word_trie) for i in list(letter_sets)[0]]
+    for i in range(0, len(ordered_letter_sets)):
+        new_all_strs = []
+        curr_letter_set = ordered_letter_sets[i]
+        for curr_letter in curr_letter_set:
+            for curr_str, curr_trie_node in all_strs:
+                test, new_trie_node = find_prefix_plus(curr_trie_node, curr_letter)
+                if not test:
+                    if len(ordered_letter_sets) - i < 3:
+                        final_ret_strs.append(curr_str)
+                    continue
+                new_str = curr_str + curr_letter
+
+                new_all_strs.append((new_str, new_trie_node))
+                if type(test) is str:
+                    new_all_strs.append((new_str + " ", word_trie))
+        all_strs = new_all_strs
+
+        print(len(all_strs))
+
+    for i in all_strs:
+        final_ret_strs.append(i[0])
+
+    print(len(all_strs))
+    with open("test1.txt", "w") as f:
+        f.write(json.dumps(final_ret_strs))
+
+    return final_ret_strs
+
+def checker(group_id, username, string):
+    string = string.lower()
+    ordered_message_letters_sets = set_letters_by_user(group_id, username)[::-1]
+
+    print(len(ordered_message_letters_sets), "messages and", len(string), "characters in string")
+    correct = True
+    for i in range(min(len(string), len(ordered_message_letters_sets))):
+        if string[i] in "*#":
+            continue
+        if string[i] not in ordered_message_letters_sets[i]:
+            correct = False
+            print(i, ordered_message_letters_sets[i], string[i])
+
+    print(correct)
+    return correct
+
+class Trie(object):
+    def __init__(self, char):
+        self.char = char
+        self.children = []
+        self.word_finished = False
+        self.is_root = False
+
+def add_to_trie(root_trie, word):
+    if not root_trie.is_root:
+        return
+    node = root_trie
+    for char in word:
+        found = False
+        for child in node.children:
+            if child.char == char:
+                found = True
+                node = child
+                break
+        if not found:
+            newnode = Trie(char)
+            node.children.append(newnode)
+            node = newnode
+    node.word_finished = True
+
+def find_prefix(root, prefix):
+    node = root
+    if not node.children:
+        return False
+
+    for char in prefix:
+        char_not_found = True
+        for child in node.children:
+            if child.char == char:
+                char_not_found = False
+                node = child
+                break
+        if char_not_found:
+            return False
+    return True
+
+def find_prefix_plus(root, prefix):
+    node = root
+    if not node.children:
+        return False, None
+
+    for char in prefix:
+        char_not_found = True
+        for child in node.children:
+            if child.char == char:
+                char_not_found = False
+                node = child
+                break
+        if char_not_found:
+            return False, None
+
+    if node.word_finished:
+        return "True", node
+    return True, node
+
+# def dict_attack_helper(list_sets, idx):
+#     if idx == len(list_sets):
+#         return []
+#     elif idx == len(list_sets) - 1:
+#         return list(list_sets[idx])
+#     else:
+
+#         for letter in list_sets[idx]:
+
+
+
+
+
+
 ##########################################################
 #################### USER INTERACTION ####################
 ##########################################################
 
+# fetch_all_messages(41805466)
+# checker(41805466, "Alan Kwok", "THELoRDisFaithful")
+# b = load_messages(44909760, False)
+# c = sorted(b, key=lambda x: -int(x["created_at"]))
+# print(b[0]["created_at"], b[0]["id"])
+# for i in range(len(b)):
+#     if b[i] != c[i]:
+#         print(b[i]["created_at"], c[i]["created_at"], i)
+#         assert False
+
+# b = load_messages(44909760, True)
+# c = sorted(b, key=lambda x: -int(x["created_at"]))
+# print(b[0]["created_at"], b[0]["id"])
+# for i in range(len(b)):
+#     if b[i] != c[i]:
+#         print(b[i]["created_at"], c[i]["created_at"], i)
+#         assert False
+
+
+
+
+a = processed_messages_by_user(41805466, "Alan Kwok")
+for i in a:
+    print(i[0])
+# fetch_all_messages_for_all_groups()
+# a = set_letters_by_user(41805466, "Alan Kwok")
+# iter_print(a)
+# b = a[::-1]
+
+
+# c = ""
+# print(len(b), ", ", len(c))
+# correct = True
+# for i in range(len(c)):
+#     if c[i] not in b[i]:
+#         correct = False
+#         print(b[i])
+# print(correct)
+# dict_attack(41805466, "Alan Kwok")
+# print(len(init_dict()))
+
+
+
+# iter_print(processed_messages_by_user(41805466, "Alan Kwok"))
 # load_all_messages(True)
 # lps(likes_per_message_per_user(41805466))
+# a = aggregate_msg_by_user(41805466)["Alan Kwok"]
+# for msg in a:
+#     print(len(msg["favorited_by"]), msg['id'], convert_time(int(msg['created_at'])))
+# lps(count_msg_by_user(41805466))
 # r = requests.get(BASE_GROUPME_URL + "groups?token=" + GROUPME_API_TOKEN)
 # # print(json.loads(r.text))
 # for thing in json.loads(r.text)["response"]:
