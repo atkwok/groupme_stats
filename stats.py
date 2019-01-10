@@ -6,7 +6,7 @@ import base64
 import matplotlib.pyplot as plot
 
 ####### SETTING VARIABLES ##########
-_RELOAD = False # If true, always fetches all messages again
+_RELOAD = True # If true, always fetches all messages again
 
 BASE_GROUPME_URL = "https://api.groupme.com/v3/"
 # .groupme.env should be a file with the first line being your groupme api token (can be base64 encoded)
@@ -460,13 +460,14 @@ def find_prefix_plus(root, prefix):
 #     if b[i] != c[i]:
 #         print(b[i]["created_at"], c[i]["created_at"], i)
 #         assert False
+lps(count_msg_by_user(41805466))
 
+# fetch_all_messages_for_all_groups()
 
-
-
-a = processed_messages_by_user(41805466, "Alan Kwok")
-for i in a:
-    print(i[0])
+# a = all_messages_by_user(41805466, "Alan Kwok")
+# for i in a[::-1]:
+#     if 'text' in i:
+#         print(i['text'][0])
 # fetch_all_messages_for_all_groups()
 # a = set_letters_by_user(41805466, "Alan Kwok")
 # iter_print(a)
